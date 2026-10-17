@@ -94,6 +94,6 @@ def test_file_tools_reject_paths_outside_input_root(tmp_path: Path) -> None:
     try:
         tools["file_strings"].handler(str(outside))
     except Exception as error:
-        assert "输入路径超出允许的输入根目录" in str(error)
+        assert "input path is outside the allowed input root" in str(error)
     else:
         raise AssertionError("expected WorkspaceError for path outside input root")

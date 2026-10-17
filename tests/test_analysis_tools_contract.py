@@ -219,7 +219,7 @@ def test_control_flow_graph_rejects_at_bound_without_consuming_more(
     def guarded(_self, _body, _forward):
         for index in range(10_001):
             yield FakeInstruction(f"{0x400000 + index:x}", (), None)
-        raise AssertionError("控制流读取越过拒绝阈值")
+        raise AssertionError("control-flow read went past the rejection threshold")
 
     monkeypatch.setattr(FakeListing, "getInstructions", guarded)
     registry = ToolRegistry()

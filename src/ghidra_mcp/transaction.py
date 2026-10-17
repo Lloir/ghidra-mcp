@@ -1,4 +1,4 @@
-"""Ghidra 写操作的原子事务边界。"""
+"""Atomic transaction boundary for Ghidra write operations."""
 
 from contextlib import contextmanager
 from collections.abc import Callable, Iterator
@@ -25,6 +25,8 @@ def program_transaction(
         persist()
     except BaseException:
         if not program.canUndo() or str(program.getUndoName()) != description:
-            raise RuntimeError(f"持久化失败，且无法安全撤销事务：{description}") from None
+            raise RuntimeError(
+                f"Persistence failed and the transaction cannot be safely undone: {description}"
+            ) from None
         program.undo()
         raise

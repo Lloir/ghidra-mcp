@@ -1,4 +1,4 @@
-"""内存与函数的只读导航工具。"""
+"""Read-only navigation tools for memory and functions."""
 
 from itertools import islice
 from typing import Any
@@ -8,13 +8,13 @@ from ..runtime import ProgramWorkspace
 
 
 class ToolInputError(ValueError):
-    """工具输入不能解析或超出公开边界。"""
+    """Tool input could not be parsed or exceeds a public boundary."""
 
 
 def _address(api: Any, value: str) -> Any:
     address = api.toAddr(value)
     if address is None:
-        raise ToolInputError(f"无法解析地址：{value}")
+        raise ToolInputError(f"could not resolve address: {value}")
     return address
 
 
@@ -54,13 +54,13 @@ def register_navigation_tools(registry: ToolRegistry, workspace: ProgramWorkspac
         byte_order: str = "little",
     ) -> dict[str, object]:
         if not 1 <= length <= 1_048_576:
-            raise ToolInputError("length 必须在 1 到 1048576 之间")
+            raise ToolInputError("length must be between 1 and 1048576")
         if unit_size not in {1, 2, 4, 8}:
-            raise ToolInputError("unit_size 必须是 1、2、4 或 8")
+            raise ToolInputError("unit_size must be 1, 2, 4, or 8")
         if byte_order not in {"little", "big"}:
-            raise ToolInputError("byte_order 必须是 little 或 big")
+            raise ToolInputError("byte_order must be little or big")
         if interpret and length > 4096:
-            raise ToolInputError("解释型 memory_read 的 length 不得超过 4096")
+            raise ToolInputError("length must not exceed 4096 for interpreted memory_read")
         api = workspace.get(program_id)
         resolved = _address(api, address)
         data = bytes((int(value) & 0xFF) for value in api.getBytes(resolved, length))
@@ -90,9 +90,9 @@ def register_navigation_tools(registry: ToolRegistry, workspace: ProgramWorkspac
         program_id: str, offset: int = 0, limit: int = 100
     ) -> list[dict[str, object]]:
         if offset < 0:
-            raise ToolInputError("offset 不得小于 0")
+            raise ToolInputError("offset must not be less than 0")
         if not 1 <= limit <= 1000:
-            raise ToolInputError("limit 必须在 1 到 1000 之间")
+            raise ToolInputError("limit must be between 1 and 1000")
         program = workspace.get(program_id).getCurrentProgram()
         functions = program.getFunctionManager().getFunctions(True)
         return [_function_json(function) for function in islice(functions, offset, offset + limit)]
@@ -118,41 +118,41 @@ def register_navigation_tools(registry: ToolRegistry, workspace: ProgramWorkspac
     definitions = (
         ToolDefinition(
             "memory_blocks_list",
-            """列出程序的全部内存块及访问属性。
+            """List all of a program's memory blocks and their access attributes.
 
-输入输出与副作用：输入程序会话标识；返回块名、地址范围、大小和读写执行属性；只读。
+Inputs/outputs and side effects: takes a program session id; returns block name, address range, size, and read/write/execute attributes; read-only.
 
-何时使用：判断代码与数据布局或选择读取范围时调用；读取实际字节时改用 memory_read。
+When to use: call to determine code/data layout or choose a read range; use memory_read to read actual bytes.
 """,
             memory_blocks_list,
         ),
         ToolDefinition(
             "memory_read",
-            """从程序内存读取有界字节序列。
+            """Read a bounded sequence of bytes from program memory.
 
-输入输出与副作用：输入程序会话标识、地址和长度；默认返回十六进制字节；可选解释最多 4096 字节为 ASCII 和指定字节序的 1/2/4/8 字节无符号值；只读，原始读取最多 1 MiB。
+Inputs/outputs and side effects: takes a program session id, address, and length; returns hex bytes by default; optionally interprets up to 4096 bytes as ASCII and 1/2/4/8-byte unsigned values in the given byte order; read-only, raw reads capped at 1 MiB.
 
-何时使用：需要原始字节、字符串线索、整数或指针候选时调用；只需查看内存布局时改用 memory_blocks_list，机器指令用 instructions_list。
+When to use: call when you need raw bytes, string clues, integer or pointer candidates; use memory_blocks_list if you only need to see memory layout, and instructions_list for machine instructions.
 """,
             memory_read,
         ),
         ToolDefinition(
             "functions_list",
-            """按地址顺序分页列出已定义函数。
+            """List defined functions in address order, paginated.
 
-输入输出与副作用：输入程序会话标识、偏移和数量；返回名称、入口、签名及外部或 thunk 属性；只读。
+Inputs/outputs and side effects: takes a program session id, offset, and count; returns name, entry point, signature, and external/thunk attributes; read-only.
 
-何时使用：浏览函数集合或寻找候选目标时调用；已知函数内地址并需单项详情时改用 function_get。
+When to use: call to browse the function set or find candidate targets; use function_get instead if you already know an address inside a function and need its details.
 """,
             functions_list,
         ),
         ToolDefinition(
             "function_get",
-            """读取包含指定地址的函数详情。
+            """Read details of the function containing a given address.
 
-输入输出与副作用：输入程序会话标识和地址；返回 contained 或 unassigned 解析状态，命中时包含函数详情，未命中时明确说明地址不在 Ghidra Function body；只读。
+Inputs/outputs and side effects: takes a program session id and address; returns a "contained" or "unassigned" resolution status, including function details on a hit, and clearly stating the address is not in a Ghidra function body on a miss; read-only.
 
-何时使用：已知地址并需要所属函数时调用；需要遍历或分页发现函数时改用 functions_list。
+When to use: call when you know an address and need the function it belongs to; use functions_list when you need to enumerate or page through functions.
             """,
             function_get,
             contract_version=2,

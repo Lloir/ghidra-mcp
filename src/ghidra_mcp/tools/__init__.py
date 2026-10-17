@@ -1,1 +1,1 @@
-"""默认和按需 MCP 工具组。"""
+"""Default and on-demand MCP tool groups."""

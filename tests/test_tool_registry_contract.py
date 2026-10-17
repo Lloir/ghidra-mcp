@@ -1,11 +1,11 @@
 import pytest
 
 
-VALID_DESCRIPTION = """读取程序概要信息。
+VALID_DESCRIPTION = """Read program summary information.
 
-输入输出与副作用：输入当前程序标识；返回架构、映像基址和分析状态；只读。
+Inputs/outputs and side effects: takes the current program id; returns architecture, image base, and analysis status; read-only.
 
-何时使用：开始分析时建立上下文；需要枚举函数时改用 functions_list。
+When to use: to establish context at the start of analysis; use functions_list instead when you need to enumerate functions.
 """
 
 
@@ -20,8 +20,8 @@ def test_default_registry_never_exposes_more_than_40_tools() -> None:
 def test_tool_description_requires_three_sections() -> None:
     from ghidra_mcp.registry import DescriptionError, ToolDefinition
 
-    with pytest.raises(DescriptionError, match="输入输出与副作用"):
-        ToolDefinition(name="program_info", description="读取程序概要信息。", handler=lambda: None)
+    with pytest.raises(DescriptionError, match="Inputs/outputs and side effects"):
+        ToolDefinition(name="program_info", description="Reads program summary information.", handler=lambda: None)
 
     tool = ToolDefinition(name="program_info", description=VALID_DESCRIPTION, handler=lambda: None)
     assert tool.name == "program_info"

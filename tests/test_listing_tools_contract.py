@@ -272,7 +272,7 @@ def test_listing_tools_validate_direction_address_and_page_size() -> None:
         tools["instructions_list"]("program-1", limit=0)
     with pytest.raises(ToolInputError, match="direction"):
         tools["references_list"]("program-1", "00400010", direction="sideways")
-    with pytest.raises(ToolInputError, match="地址"):
+    with pytest.raises(ToolInputError, match="address"):
         tools["references_list"]("program-1", "invalid")
 
 
@@ -298,7 +298,7 @@ def test_instructions_list_reports_when_ghidra_advances_to_defined_instruction()
             }
         ],
     }
-    with pytest.raises(ToolInputError, match="下一条已定义指令.*00400010"):
+    with pytest.raises(ToolInputError, match="next defined instruction.*00400010"):
         tool("program-1", address="00400008", require_exact_start=True)
 
 
@@ -327,7 +327,7 @@ def test_listing_page_does_not_consume_past_requested_window() -> None:
         yield "skip"
         yield "first"
         yield "second"
-        raise AssertionError("分页读取越过 offset + limit")
+        raise AssertionError("pagination read went past offset + limit")
 
     assert _page(guarded(), offset=1, limit=2) == ["first", "second"]
 
@@ -338,10 +338,10 @@ def test_references_stop_after_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     def guarded_from(_self, address):
         yield FakeReference(address, "00400030")
         yield FakeReference(address, "00400034")
-        raise AssertionError("引用读取越过 limit")
+        raise AssertionError("reference read went past limit")
 
     def forbidden_to(_self, _address):
-        raise AssertionError("已有足够结果后不应读取另一方向")
+        raise AssertionError("should not read the other direction once there are already enough results")
 
     monkeypatch.setattr(FakeReferenceManager, "getReferencesFrom", guarded_from)
     monkeypatch.setattr(FakeReferenceManager, "getReferencesTo", forbidden_to)
@@ -580,7 +580,7 @@ def test_references_scan_skips_instruction_offcuts_and_defined_data(
         lambda _program: type(
             "ForbiddenPseudoDisassembler",
             (),
-            {"disassemble": lambda _self, _address: pytest.fail("offcut/data 不得解码")},
+            {"disassemble": lambda _self, _address: pytest.fail("offcut/data must not be decoded")},
         )(),
     )
     registry = ToolRegistry()
@@ -606,7 +606,7 @@ def test_references_scan_rejects_unaligned_range() -> None:
     listing.register_listing_tools(registry, FakeWorkspace())
     tool = {item.name: item.handler for item in registry.enabled_tools()}["references_list"]
 
-    with pytest.raises(ToolInputError, match="对齐"):
+    with pytest.raises(ToolInputError, match="alignment"):
         tool(
             "program-1",
             "00400010",

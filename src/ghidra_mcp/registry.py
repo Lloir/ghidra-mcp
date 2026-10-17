@@ -1,4 +1,4 @@
-"""任务导向 MCP 工具的唯一注册入口。"""
+"""The single registration point for task-oriented MCP tools."""
 
 from __future__ import annotations
 
@@ -9,11 +9,11 @@ from mcp.types import ToolAnnotations
 
 
 class RegistryError(ValueError):
-    """工具注册违反唯一性或命名契约。"""
+    """A tool registration violates the uniqueness or naming contract."""
 
 
 class DescriptionError(ValueError):
-    """工具说明缺少调用决策所需的信息。"""
+    """A tool description is missing information needed to decide when to call it."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,10 +27,13 @@ class ToolDefinition:
 
     def __post_init__(self) -> None:
         if self.contract_version < 1:
-            raise RegistryError("contract_version 必须大于或等于 1")
-        for required in ("输入输出与副作用：", "何时使用："):
+            raise RegistryError("contract_version must be greater than or equal to 1")
+        for required in ("Inputs/outputs and side effects:", "When to use:"):
             if required not in self.description:
-                raise DescriptionError(f"工具 {self.name} 的说明缺少“{required.rstrip('：')}”段")
+                raise DescriptionError(
+                    f"tool {self.name} description is missing the "
+                    f"\"{required.rstrip(':')}\" section"
+                )
 
 
 class ToolRegistry:
@@ -41,13 +44,15 @@ class ToolRegistry:
     def register(self, tool: ToolDefinition) -> None:
         lowered = tool.name.lower()
         if lowered.endswith("_batch") or lowered.endswith("_bulk"):
-            raise RegistryError("batch/bulk 别名不允许注册；由任务工具直接接受数组")
+            raise RegistryError(
+                "batch/bulk aliases are not allowed; task tools accept arrays directly"
+            )
         if tool.name in self._tools:
             raise RegistryError(f"tool {tool.name!r} already registered")
         self._tools[tool.name] = tool
         if len(self.enabled_tools()) > 40 and tool.group == "default":
             del self._tools[tool.name]
-            raise RegistryError("默认工具不得超过 40 个")
+            raise RegistryError("default tools must not exceed 40")
 
     def enabled_tools(self) -> tuple[ToolDefinition, ...]:
         return tuple(tool for tool in self._tools.values() if tool.group in self._enabled_groups)

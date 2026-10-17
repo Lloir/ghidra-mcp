@@ -1,8 +1,10 @@
-"""不依赖 Ghidra 导入的原始文件取证工具。
+"""Raw file forensics tools that do not depend on a Ghidra import.
 
-program_open 只能处理 Ghidra 能自动识别的格式；面对无格式头的裸二进制（固件转储等），
-在知道正确的语言和基址之前，这里的工具让调用方可以直接检视文件字节本身
-（可打印字符串、十六进制片段），寻找芯片型号、已知头部结构等线索。
+program_open can only handle formats Ghidra auto-detects. For headerless raw
+binaries (firmware dumps and the like), before the correct language and base
+address are known, the tools here let a caller inspect the file's bytes
+directly (printable strings, hex snippets) to look for chip names, known
+header structures, and other clues.
 """
 
 from __future__ import annotations
@@ -13,10 +15,11 @@ from pathlib import Path
 from ..registry import ToolDefinition, ToolRegistry
 from ..runtime import ProgramWorkspace
 
+
 def _read_range(path: Path, offset: int, length: int | None) -> bytes:
     size = path.stat().st_size
     if offset < 0 or offset > size:
-        raise ValueError(f"offset 超出文件范围（文件大小 {size}）")
+        raise ValueError(f"offset is out of range for this file (size {size})")
     with path.open("rb") as stream:
         stream.seek(offset)
         if length is None:
@@ -85,21 +88,21 @@ def register_raw_tools(registry: ToolRegistry, workspace: ProgramWorkspace) -> N
     definitions = (
         ToolDefinition(
             "file_strings",
-            """在不导入 Ghidra 的情况下，直接从文件字节中提取可打印字符串（ASCII 与 UTF-16LE）。
+            """Extract printable strings (ASCII and UTF-16LE) directly from a file's bytes, without importing it into Ghidra.
 
-输入输出与副作用：输入本地文件路径、可选字节范围（offset/length）、最短字符串长度（默认 4）和返回条数上限（默认 500）；返回按偏移排序的 {offset, encoding, text} 列表；只读，不创建或修改任何 Ghidra 项目。
+Inputs/outputs and side effects: takes a local file path, an optional byte range (offset/length), a minimum string length (default 4), and a maximum number of results (default 500); returns a list of {offset, encoding, text} sorted by offset; read-only, creates or modifies no Ghidra project.
 
-何时使用：program_open 因无法识别格式而失败时，用它寻找芯片型号、厂商名、固件版本等线索，为 program_open_raw 所需的语言和基址提供依据；也适用于任意文件的快速字符串扫描，无需先建立程序会话。
+When to use: when program_open fails because the format can't be recognized, use it to look for chip names, vendor names, firmware versions, and other clues to supply the language and base address program_open_raw needs; also useful for a quick string scan of any file without first establishing a program session.
 """,
             file_strings,
         ),
         ToolDefinition(
             "file_hexdump",
-            """在不导入 Ghidra 的情况下，直接读取文件某个字节范围并返回十六进制与可打印字符预览。
+            """Read a byte range from a file directly and return it as hex plus a printable-character preview, without importing it into Ghidra.
 
-输入输出与副作用：输入本地文件路径、偏移 offset（默认 0）和长度 length（默认 256，上限 65536）；返回 {offset, length, hex, ascii}；只读，不创建或修改任何 Ghidra 项目。
+Inputs/outputs and side effects: takes a local file path, an offset (default 0), and a length (default 256, capped at 65536); returns {offset, length, hex, ascii}; read-only, creates or modifies no Ghidra project.
 
-何时使用：怀疑某个偏移处存在已知头部结构（ELF、u-boot uImage、WinCE ROMHDR 等）时，用它直接核对魔数和字段，再决定 program_open_raw 的参数；不适合扫描整个大文件，应先用 file_strings 或已知布局定位感兴趣的偏移。
+When to use: when you suspect a known header structure (ELF, u-boot uImage, WinCE ROMHDR, etc.) at a particular offset, use it to check magic bytes and fields directly before deciding on program_open_raw's parameters; not suited to scanning an entire large file — locate an offset of interest first with file_strings or a known layout.
 """,
             file_hexdump,
         ),

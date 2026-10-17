@@ -104,7 +104,7 @@ def test_http_service_rejects_token_with_edge_whitespace_even_for_direct_setting
         auth_token=auth_token,
     )
 
-    with pytest.raises(ConfigurationError, match="首尾空白"):
+    with pytest.raises(ConfigurationError, match="leading or trailing"):
         create_service(settings, pyghidra_module=FakePyGhidra())
 
 

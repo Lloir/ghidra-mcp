@@ -1,4 +1,4 @@
-"""服务配置加载与边界校验。"""
+"""Service configuration loading and boundary validation."""
 
 from __future__ import annotations
 
@@ -13,16 +13,18 @@ from urllib.parse import urlsplit
 
 
 class ConfigurationError(ValueError):
-    """配置文件或环境变量不符合公开契约。"""
+    """The config file or environment variables violate the public contract."""
 
 
 def validate_http_auth_token(token: str | None) -> None:
     if token is None or not token.strip():
-        raise ConfigurationError("streamable-http 必须设置 GHIDRA_MCP_AUTH_TOKEN")
+        raise ConfigurationError("streamable-http requires GHIDRA_MCP_AUTH_TOKEN to be set")
     if token != token.strip():
-        raise ConfigurationError("GHIDRA_MCP_AUTH_TOKEN 不允许包含首尾空白")
+        raise ConfigurationError(
+            "GHIDRA_MCP_AUTH_TOKEN must not contain leading or trailing whitespace"
+        )
     if len(token.encode("utf-8")) < 32:
-        raise ConfigurationError("GHIDRA_MCP_AUTH_TOKEN 至少需要 32 个 UTF-8 字节")
+        raise ConfigurationError("GHIDRA_MCP_AUTH_TOKEN requires at least 32 UTF-8 bytes")
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,12 +54,14 @@ def _read_toml(path: Path | None) -> dict[str, object]:
         document = tomllib.load(stream)
     for section, values in document.items():
         if section not in _ALLOWED_KEYS:
-            raise ConfigurationError(f"未知配置节 {section}，来源 {path.name}")
+            raise ConfigurationError(f"Unknown config section {section}, from {path.name}")
         if not isinstance(values, dict):
-            raise ConfigurationError(f"配置节 {section} 必须是表，来源 {path.name}")
+            raise ConfigurationError(f"Config section {section} must be a table, from {path.name}")
         for key in values:
             if key not in _ALLOWED_KEYS[section]:
-                raise ConfigurationError(f"未知配置键 {section}.{key}，来源 {path.name}")
+                raise ConfigurationError(
+                    f"Unknown config key {section}.{key}, from {path.name}"
+                )
     return document
 
 
@@ -71,7 +75,7 @@ def _read_dotenv(path: Path | None) -> dict[str, str]:
             continue
         key, separator, value = raw_line.partition("=")
         if not separator or not key.strip():
-            raise ConfigurationError(f"无效 .env 行 {line_number}，来源 {path.name}")
+            raise ConfigurationError(f"Invalid .env line {line_number}, from {path.name}")
         key = key.strip()
         if (
             key == "GHIDRA_MCP_AUTH_TOKEN"
@@ -90,17 +94,19 @@ def _integer(value: object, *, key: str) -> int:
     try:
         return int(value)
     except (TypeError, ValueError) as error:
-        raise ConfigurationError(f"{key} 必须是整数，实际为 {value!r}") from error
+        raise ConfigurationError(f"{key} must be an integer, got {value!r}") from error
 
 
 def normalize_http_public_url(value: str | None) -> str:
     if value is None or not value.strip():
-        raise ConfigurationError("streamable-http 必须设置 GHIDRA_MCP_PUBLIC_URL")
+        raise ConfigurationError("streamable-http requires GHIDRA_MCP_PUBLIC_URL to be set")
     try:
         parsed = urlsplit(value.strip())
         port = parsed.port
     except ValueError as error:
-        raise ConfigurationError("GHIDRA_MCP_PUBLIC_URL 必须是有效的 HTTP(S) 根 URL") from error
+        raise ConfigurationError(
+            "GHIDRA_MCP_PUBLIC_URL must be a valid HTTP(S) root URL"
+        ) from error
     hostname = parsed.hostname
     if (
         parsed.scheme not in {"http", "https"}
@@ -113,7 +119,7 @@ def normalize_http_public_url(value: str | None) -> str:
         or parsed.fragment
         or any(character.isspace() for character in parsed.netloc)
     ):
-        raise ConfigurationError("GHIDRA_MCP_PUBLIC_URL 必须是有效的 HTTP(S) 根 URL")
+        raise ConfigurationError("GHIDRA_MCP_PUBLIC_URL must be a valid HTTP(S) root URL")
     normalized = f"{parsed.scheme}://{parsed.hostname}"
     if ":" in parsed.hostname:
         normalized = f"{parsed.scheme}://[{parsed.hostname}]"
@@ -143,7 +149,7 @@ def load_settings(
     dotenv_path: Path | None = Path(".env"),
     environ: Mapping[str, str] | None = None,
 ) -> Settings:
-    """按环境变量、.env、TOML、默认值的顺序合并配置。"""
+    """Merge configuration in this order: environment variables, .env, TOML, defaults."""
 
     document = _read_toml(config_path)
     dotenv = _read_dotenv(dotenv_path)
@@ -161,7 +167,7 @@ def load_settings(
 
     transport = str(value("GHIDRA_MCP_TRANSPORT", server, "transport", "stdio"))
     if transport not in {"stdio", "streamable-http"}:
-        raise ConfigurationError("server.transport 必须是 stdio 或 streamable-http")
+        raise ConfigurationError("server.transport must be stdio or streamable-http")
     auth_token = environment.get("GHIDRA_MCP_AUTH_TOKEN", dotenv.get("GHIDRA_MCP_AUTH_TOKEN", ""))
     auth_token = auth_token or None
     if transport == "streamable-http":
@@ -169,7 +175,7 @@ def load_settings(
     input_value = value("GHIDRA_MCP_INPUT_ROOT", storage, "input_root", "")
     input_root = Path(str(input_value)).resolve() if input_value else None
     if transport == "streamable-http" and input_root is None:
-        raise ConfigurationError("streamable-http 必须设置 GHIDRA_MCP_INPUT_ROOT")
+        raise ConfigurationError("streamable-http requires GHIDRA_MCP_INPUT_ROOT to be set")
     install_value = value("GHIDRA_INSTALL_DIR", ghidra, "install_dir", "")
     install_dir = Path(str(install_value)).resolve() if install_value else None
     analysis_timeout_seconds = _integer(
@@ -182,10 +188,10 @@ def load_settings(
         key="ghidra.analysis_timeout_seconds",
     )
     if not 1 <= analysis_timeout_seconds <= 3600:
-        raise ConfigurationError("ghidra.analysis_timeout_seconds 必须在 1 到 3600 之间")
+        raise ConfigurationError("ghidra.analysis_timeout_seconds must be between 1 and 3600")
     port = _integer(value("GHIDRA_MCP_PORT", server, "port", 8765), key="server.port")
     if not 1 <= port <= 65535:
-        raise ConfigurationError("server.port 必须在 1 到 65535 之间")
+        raise ConfigurationError("server.port must be between 1 and 65535")
     public_url_value = str(value("GHIDRA_MCP_PUBLIC_URL", server, "public_url", "")).strip()
     public_url = (
         normalize_http_public_url(public_url_value) if transport == "streamable-http" else None

@@ -25,7 +25,7 @@ def test_container_mcp_analyzes_and_persists_real_elf() -> None:
     url = os.environ.get("GHIDRA_MCP_CONTAINER_URL")
     token = os.environ.get("GHIDRA_MCP_CONTAINER_TOKEN")
     if not url or not token:
-        pytest.skip("GHIDRA_MCP_CONTAINER_URL/TOKEN 未配置")
+        pytest.skip("GHIDRA_MCP_CONTAINER_URL/TOKEN not configured")
 
     expected_name = os.environ.get("GHIDRA_MCP_CONTAINER_EXPECT_NAME", "fixture_symbolic")
     rename_to = os.environ.get("GHIDRA_MCP_CONTAINER_RENAME_TO")

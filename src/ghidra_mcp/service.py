@@ -1,4 +1,4 @@
-"""完整 MCP 服务对象的装配与退出清理。"""
+"""Assembly and shutdown cleanup for the complete MCP service object."""
 
 from dataclasses import dataclass
 from typing import Any
@@ -35,13 +35,15 @@ class MCPService:
 
 def create_service(settings: Settings, *, pyghidra_module: Any | None = None) -> MCPService:
     if settings.install_dir is None:
-        raise ConfigurationError("必须通过 GHIDRA_INSTALL_DIR 或 TOML 配置 Ghidra 安装目录")
+        raise ConfigurationError(
+            "the Ghidra installation directory must be configured via GHIDRA_INSTALL_DIR or TOML"
+        )
     public_url = None
     if settings.transport == "streamable-http":
         validate_http_auth_token(settings.auth_token)
         public_url = normalize_http_public_url(settings.public_url)
     if settings.transport == "streamable-http" and settings.input_root is None:
-        raise ConfigurationError("streamable-http 必须设置 GHIDRA_MCP_INPUT_ROOT")
+        raise ConfigurationError("streamable-http requires GHIDRA_MCP_INPUT_ROOT to be set")
     runtime = GhidraRuntime(
         settings.install_dir,
         pyghidra_module=pyghidra_module,

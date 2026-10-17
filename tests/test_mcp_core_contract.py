@@ -11,11 +11,11 @@ from starlette.testclient import TestClient
 from ghidra_mcp.registry import ToolDefinition, ToolRegistry
 
 
-DESCRIPTION = """回显输入文本。
+DESCRIPTION = """Echo the input text.
 
-输入输出与副作用：输入文本；返回相同文本；只读。
+Inputs/outputs and side effects: takes text; returns the same text; read-only.
 
-何时使用：验证 MCP 调用链；真实程序分析应使用对应任务工具。
+When to use: to verify the MCP call chain; real program analysis should use the corresponding task tool.
 """
 
 
@@ -211,7 +211,7 @@ def test_token_verifier_rejects_unicode_without_raising() -> None:
 
     verifier = StaticTokenVerifier("ascii-test-token")
 
-    assert asyncio.run(verifier.verify_token("令牌")) is None
+    assert asyncio.run(verifier.verify_token("token")) is None
 
 
 def test_sync_tools_use_one_worker_without_blocking_event_loop() -> None:
@@ -436,7 +436,7 @@ def test_runtime_rejects_installations_without_a_readable_version(tmp_path: Path
     install_dir.mkdir()
     fake = FakePyGhidra()
 
-    with pytest.raises(WorkspaceError, match="无法确认 Ghidra 版本"):
+    with pytest.raises(WorkspaceError, match="Unable to determine Ghidra version"):
         GhidraRuntime(install_dir, pyghidra_module=fake).ensure_started()
 
     assert fake.start_calls == []
@@ -450,7 +450,7 @@ def test_workspace_rejects_missing_binary_before_starting_jvm(tmp_path: Path) ->
     fake = FakePyGhidra()
     workspace = ProgramWorkspace(GhidraRuntime(install_dir, pyghidra_module=fake))
 
-    with pytest.raises(WorkspaceError, match="不存在"):
+    with pytest.raises(WorkspaceError, match="does not exist"):
         workspace.open(tmp_path / "missing.bin")
 
     assert fake.start_calls == []
@@ -511,7 +511,7 @@ def test_workspace_rejects_paths_outside_input_root_and_symlink_escape(tmp_path:
     )
 
     for path in (outside, escape):
-        with pytest.raises(WorkspaceError, match="输入根目录"):
+        with pytest.raises(WorkspaceError, match="input root"):
             workspace.open(path)
 
     assert fake.start_calls == []
@@ -587,7 +587,7 @@ def test_workspace_close_removes_saved_session_when_context_exit_fails(tmp_path:
     with pytest.raises(RuntimeError, match="save failed"):
         workspace.close(program_id)
 
-    with pytest.raises(WorkspaceError, match="程序会话不存在"):
+    with pytest.raises(WorkspaceError, match="program session does not exist"):
         workspace.get(program_id)
     assert workspace.list_open() == []
 
@@ -686,7 +686,7 @@ def test_existing_program_file_error_after_enter_never_falls_back_to_import(
 
         def program_loader(self):
             self.loader_calls += 1
-            raise AssertionError("已进入现有程序后不得回退到导入")
+            raise AssertionError("must not fall back to import after entering an existing program")
 
     fake = ModernPyGhidra()
     runtime = GhidraRuntime(tmp_path, pyghidra_module=fake)

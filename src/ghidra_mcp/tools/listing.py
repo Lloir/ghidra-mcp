@@ -1,4 +1,4 @@
-"""指令、符号、引用与字符串只读工具。"""
+"""Read-only tools for instructions, symbols, references, and strings."""
 
 from itertools import chain, islice
 from typing import Any, Iterable
@@ -10,16 +10,16 @@ from .navigation import ToolInputError
 
 def _page(values: Iterable[Any], *, offset: int, limit: int) -> list[Any]:
     if offset < 0:
-        raise ToolInputError("offset 不得小于 0")
+        raise ToolInputError("offset must not be less than 0")
     if not 1 <= limit <= 1000:
-        raise ToolInputError("limit 必须在 1 到 1000 之间")
+        raise ToolInputError("limit must be between 1 and 1000")
     return list(islice(values, offset, offset + limit))
 
 
 def _address(api: Any, value: str) -> Any:
     address = api.toAddr(value)
     if address is None:
-        raise ToolInputError(f"无法解析地址：{value}")
+        raise ToolInputError(f"could not resolve address: {value}")
     return address
 
 
@@ -76,8 +76,11 @@ def register_listing_tools(registry: ToolRegistry, workspace: ProgramWorkspace) 
             else int(effective.subtract(requested))
         )
         if require_exact_start and exact_start is not True:
-            next_address = "无" if effective is None else str(effective)
-            raise ToolInputError(f"请求地址不是已定义指令起点；下一条已定义指令：{next_address}")
+            next_address = "none" if effective is None else str(effective)
+            raise ToolInputError(
+                f"requested address is not a defined instruction start; "
+                f"next defined instruction: {next_address}"
+            )
         instructions = _page(
             () if first is None else chain((first,), iterator), offset=offset, limit=limit
         )
@@ -131,9 +134,9 @@ def register_listing_tools(registry: ToolRegistry, workspace: ProgramWorkspace) 
         scan_end: str | None = None,
     ) -> dict[str, object]:
         if direction not in {"from", "to", "both"}:
-            raise ToolInputError("direction 必须是 from、to 或 both")
+            raise ToolInputError("direction must be from, to, or both")
         if not 1 <= limit <= 1000:
-            raise ToolInputError("limit 必须在 1 到 1000 之间")
+            raise ToolInputError("limit must be between 1 and 1000")
         api = workspace.get(program_id)
         resolved = _address(api, address)
         program = api.getCurrentProgram()
@@ -153,20 +156,28 @@ def register_listing_tools(registry: ToolRegistry, workspace: ProgramWorkspace) 
         found = found[:limit]
         scan = None
         if (scan_start is None) != (scan_end is None):
-            raise ToolInputError("scan_start 与 scan_end 必须同时提供")
+            raise ToolInputError("scan_start and scan_end must both be provided or both omitted")
         if scan_start is not None and direction == "from":
-            raise ToolInputError("伪反汇编扫描仅用于 to 或 both 方向")
+            raise ToolInputError("pseudo-disassembly scanning is only for the to or both directions")
         if scan_start is not None and scan_end is not None:
             start = _address(api, scan_start)
             end = _address(api, scan_end)
             if start.getAddressSpace() != end.getAddressSpace() or end.subtract(start) < 0:
-                raise ToolInputError("扫描范围必须位于同一地址空间且 scan_end 不小于 scan_start")
+                raise ToolInputError(
+                    "the scan range must be in the same address space and scan_end must not be "
+                    "less than scan_start"
+                )
             alignment = int(program.getLanguage().getInstructionAlignment())
             if start.getOffset() % alignment or end.getOffset() % alignment:
-                raise ToolInputError("scan_start 与 scan_end 必须满足语言指令对齐")
+                raise ToolInputError(
+                    "scan_start and scan_end must satisfy the language's instruction alignment"
+                )
             candidate_count = int(end.subtract(start)) // alignment + 1
             if candidate_count > 4_096:
-                raise ToolInputError("扫描范围最多包含 4096 个对齐地址；更大范围请分块查询")
+                raise ToolInputError(
+                    "the scan range may contain at most 4096 aligned addresses; "
+                    "query a larger range in chunks"
+                )
             pseudo = _new_pseudo_disassembler(program)
             existing_pairs = {(item["from"], item["to"]) for item in found}
             decoded = 0
@@ -264,43 +275,43 @@ def register_listing_tools(registry: ToolRegistry, workspace: ProgramWorkspace) 
     definitions = (
         ToolDefinition(
             "instructions_list",
-            """从程序起点或指定地址分页读取指令。
+            """Read instructions, paginated, starting from the program start or a given address.
 
-输入输出与副作用：输入程序会话、可选起始地址和分页参数；返回请求起点、Ghidra 实际起点、跳过字节数和指令列表；require_exact_start 为 true 时拒绝未定义指令起点；只读。
+Inputs/outputs and side effects: takes a program session id, an optional starting address, and pagination parameters; returns the requested start, Ghidra's actual start, the number of bytes skipped, and the instruction list; when require_exact_start is true, rejects an address that is not a defined instruction start; read-only.
 
-何时使用：检查具体机器指令或验证反编译结果时调用；只需原始字节时改用 memory_read。
+When to use: call to inspect concrete machine instructions or verify decompilation results; use memory_read if you only need the raw bytes.
             """,
             instructions_list,
             contract_version=2,
         ),
         ToolDefinition(
             "symbols_list",
-            """分页列出符号并可按名称片段过滤。
+            """List symbols, paginated, optionally filtered by a name fragment.
 
-输入输出与副作用：输入程序会话、可选名称片段和分页参数；返回名称、地址、类型、来源与主符号状态；只读。
+Inputs/outputs and side effects: takes a program session id, an optional name fragment, and pagination parameters; returns name, address, type, source, and primary-symbol status; read-only.
 
-何时使用：按名称发现函数、标签或外部符号时调用；只需函数集合时优先使用 functions_list。
+When to use: call to discover functions, labels, or external symbols by name; prefer functions_list when you only need the set of functions.
 """,
             symbols_list,
         ),
         ToolDefinition(
             "references_list",
-            """读取指定地址的入向、出向或双向引用。
+            """Read incoming, outgoing, or both-direction references at a given address.
 
-输入输出与副作用：输入程序会话、地址、方向、数量上限及可选伪反汇编扫描范围；返回引用、来源/置信度、覆盖范围、不完整与截断状态；只读，不修改 Listing。
+Inputs/outputs and side effects: takes a program session id, address, direction, a result cap, and an optional pseudo-disassembly scan range; returns references, source/confidence, coverage, and incomplete/truncated status; read-only, does not modify the listing.
 
-何时使用：追踪调用者、被调用者或数据交叉引用时调用；需要完整函数集合时改用 functions_list。
+When to use: call to trace callers, callees, or data cross-references; use functions_list when you need the complete set of functions.
 """,
             references_list,
             contract_version=2,
         ),
         ToolDefinition(
             "strings_list",
-            """分页列出已定义字符串并可按内容过滤。
+            """List defined strings, paginated, optionally filtered by content.
 
-输入输出与副作用：输入程序会话、可选内容片段和分页参数；返回地址、长度、数据类型与显示值；只读。
+Inputs/outputs and side effects: takes a program session id, an optional content fragment, and pagination parameters; returns address, length, data type, and displayed value; read-only.
 
-何时使用：从文本线索定位行为和引用时调用；搜索任意原始字节模式时不应使用本工具。
+When to use: call to locate behavior and references from textual clues; do not use this tool to search for arbitrary raw byte patterns.
 """,
             strings_list,
         ),

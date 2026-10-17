@@ -225,7 +225,7 @@ def test_operation_tools_reject_unbounded_or_ambiguous_inputs():
     registry = ToolRegistry()
     register_operation_tools(registry, FakeWorkspace())
     tools = {tool.name: tool.handler for tool in registry.enabled_tools()}
-    with pytest.raises(ValueError, match="十六进制"):
+    with pytest.raises(ValueError, match="hex_pattern"):
         tools["memory_search"]("p", "xyz")
     with pytest.raises(ValueError, match="action"):
         tools["function_tag_update"]("p", "00400000", "toggle", "reviewed")

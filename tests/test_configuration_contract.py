@@ -37,7 +37,7 @@ def test_unimplemented_tool_groups_fail_instead_of_being_silently_ignored(tmp_pa
     config = tmp_path / "settings.toml"
     config.write_text('[tools]\ngroups = ["advanced"]\n', encoding="utf-8")
 
-    with pytest.raises(ConfigurationError, match=r"未知配置节 tools.*settings\.toml"):
+    with pytest.raises(ConfigurationError, match=r"Unknown config section tools.*settings\.toml"):
         load_settings(config_path=config, dotenv_path=None, environ={})
 
 
@@ -110,7 +110,7 @@ def test_streamable_http_rejects_environment_token_with_edge_whitespace(
 ) -> None:
     from ghidra_mcp.config import ConfigurationError, load_settings
 
-    with pytest.raises(ConfigurationError, match="首尾空白"):
+    with pytest.raises(ConfigurationError, match="leading or trailing"):
         load_settings(
             config_path=None,
             dotenv_path=None,
@@ -252,7 +252,7 @@ def test_streamable_http_rejects_unquoted_dotenv_token_with_edge_whitespace(
         encoding="utf-8",
     )
 
-    with pytest.raises(ConfigurationError, match="首尾空白"):
+    with pytest.raises(ConfigurationError, match="leading or trailing"):
         load_settings(
             config_path=None,
             dotenv_path=dotenv,
@@ -301,7 +301,7 @@ def test_streamable_http_rejects_dotenv_token_with_whitespace_inside_quotes(
         encoding="utf-8",
     )
 
-    with pytest.raises(ConfigurationError, match="首尾空白"):
+    with pytest.raises(ConfigurationError, match="leading or trailing"):
         load_settings(
             config_path=None,
             dotenv_path=dotenv,

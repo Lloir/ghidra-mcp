@@ -1,4 +1,4 @@
-"""把本地工具注册表绑定到 FastMCP。"""
+"""Bind the local tool registry to FastMCP."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from .registry import ToolRegistry
 
 
 class GhidraToolExecutor:
-    """让 JVM 工具保持单线程所有权，同时不阻塞异步传输。"""
+    """Keep JVM tool ownership on a single thread without blocking the async transport."""
 
     def __init__(self) -> None:
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ghidra-mcp")
@@ -50,7 +50,7 @@ def _async_handler(function: Any, executor: GhidraToolExecutor) -> Any:
 
 
 class StaticTokenVerifier(TokenVerifier):
-    """验证部署者通过环境变量提供的单一 Bearer token。"""
+    """Verify the single bearer token the deployer supplied via environment variables."""
 
     def __init__(self, expected_token: str) -> None:
         self._expected_token = expected_token.encode("utf-8")
@@ -124,7 +124,7 @@ def create_mcp_app(
     verifier = None
     if auth_token is not None:
         if public_url is None:
-            raise ValueError("启用 HTTP 鉴权时必须提供 public_url")
+            raise ValueError("public_url must be provided when HTTP auth is enabled")
         base_url = public_url.rstrip("/")
         auth = AuthSettings(
             issuer_url=base_url,

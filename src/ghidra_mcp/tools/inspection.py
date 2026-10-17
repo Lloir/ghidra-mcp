@@ -1,4 +1,4 @@
-"""数据、注释、变量、中间表示与标记的只读检查工具。"""
+"""Read-only inspection tools for data, comments, variables, P-code, and bookmarks."""
 
 from itertools import islice
 from typing import Any, Iterable
@@ -10,21 +10,21 @@ from .navigation import ToolInputError
 
 def _page(values: Iterable[Any], offset: int, limit: int) -> list[Any]:
     if offset < 0 or not 1 <= limit <= 1000:
-        raise ToolInputError("offset 不得小于 0，limit 必须在 1 到 1000 之间")
+        raise ToolInputError("offset must not be less than 0, and limit must be between 1 and 1000")
     return list(islice(values, offset, offset + limit))
 
 
 def _address(api: Any, value: str) -> Any:
     resolved = api.toAddr(value)
     if resolved is None:
-        raise ToolInputError(f"无法解析地址：{value}")
+        raise ToolInputError(f"could not resolve address: {value}")
     return resolved
 
 
 def _function(api: Any, value: str) -> Any:
     function = api.getFunctionContaining(_address(api, value))
     if function is None:
-        raise ToolInputError(f"地址未包含在函数中：{value}")
+        raise ToolInputError(f"address is not contained in a function: {value}")
     return function
 
 
@@ -69,7 +69,7 @@ def register_inspection_tools(registry: ToolRegistry, workspace: ProgramWorkspac
         api = workspace.get(program_id)
         data = api.getCurrentProgram().getListing().getDefinedDataContaining(_address(api, address))
         if data is None:
-            raise ToolInputError(f"地址没有已定义数据：{address}")
+            raise ToolInputError(f"no defined data at address: {address}")
         return _data_json(data)
 
     def comments_list(program_id: str, offset: int = 0, limit: int = 100) -> list[dict[str, str]]:
@@ -102,7 +102,7 @@ def register_inspection_tools(registry: ToolRegistry, workspace: ProgramWorkspac
 
     def pcode_list(program_id: str, address: str, limit: int = 1000) -> list[dict[str, object]]:
         if not 1 <= limit <= 10_000:
-            raise ToolInputError("limit 必须在 1 到 10000 之间")
+            raise ToolInputError("limit must be between 1 and 10000")
         api = workspace.get(program_id)
         function = _function(api, address)
         instructions = (
@@ -160,42 +160,42 @@ def register_inspection_tools(registry: ToolRegistry, workspace: ProgramWorkspac
     definitions = (
         ToolDefinition(
             "data_list",
-            """分页列出已定义数据并可按类型过滤。\n\n输入输出与副作用：输入程序会话、可选类型片段和分页参数；返回地址、长度、类型和值；只读。\n\n何时使用：浏览结构化数据定义时调用；只看字符串用 strings_list，读取原始字节用 memory_read。\n""",
+            """List defined data, paginated, optionally filtered by type.\n\nInputs/outputs and side effects: takes a program session, an optional type fragment, and pagination parameters; returns address, length, type, and value; read-only.\n\nWhen to use: call to browse structured data definitions; use strings_list if you only need strings, and memory_read to read raw bytes.\n""",
             data_list,
         ),
         ToolDefinition(
             "data_get",
-            """读取包含指定地址的已定义数据。\n\n输入输出与副作用：输入程序会话和地址；返回数据起点、长度、类型和值；只读。\n\n何时使用：已知数据内地址并需完整定义时调用；批量浏览时改用 data_list。\n""",
+            """Read the defined data containing a given address.\n\nInputs/outputs and side effects: takes a program session and address; returns the data's start, length, type, and value; read-only.\n\nWhen to use: call when you know an address inside data and need its full definition; use data_list when browsing in bulk.\n""",
             data_get,
         ),
         ToolDefinition(
             "comments_list",
-            """分页列出程序中的全部标准注释。\n\n输入输出与副作用：输入程序会话和分页参数；返回地址、注释类型与文本；只读。\n\n何时使用：恢复既有分析笔记时调用；新增或删除注释用 comment_set。\n""",
+            """List all standard comments in the program, paginated.\n\nInputs/outputs and side effects: takes a program session and pagination parameters; returns address, comment kind, and text; read-only.\n\nWhen to use: call to recover existing analysis notes; use comment_set to add or remove comments.\n""",
             comments_list,
         ),
         ToolDefinition(
             "variables_list",
-            """列出函数参数与局部变量。\n\n输入输出与副作用：输入程序会话和函数内地址；返回名称、类型、存储、角色与注释；只读。\n\n何时使用：检查函数原型和局部状态时调用；函数级身份信息用 function_get。\n""",
+            """List a function's parameters and local variables.\n\nInputs/outputs and side effects: takes a program session and an address inside a function; returns name, type, storage, role, and comment; read-only.\n\nWhen to use: call to inspect a function's prototype and local state; use function_get for function-level identity information.\n""",
             variables_list,
         ),
         ToolDefinition(
             "pcode_list",
-            """读取函数指令对应的 Ghidra P-code。\n\n输入输出与副作用：输入程序会话、函数内地址和指令上限；返回每条指令地址及 P-code 操作；只读。\n\n何时使用：做架构无关语义分析时调用；高层 C 文本用 decompile_function，机器指令用 instructions_list。\n""",
+            """Read the Ghidra P-code for a function's instructions.\n\nInputs/outputs and side effects: takes a program session, an address inside a function, and an instruction cap; returns each instruction's address and P-code ops; read-only.\n\nWhen to use: call for architecture-independent semantic analysis; use decompile_function for high-level C text, and instructions_list for machine instructions.\n""",
             pcode_list,
         ),
         ToolDefinition(
             "data_types_list",
-            """分页列出程序数据类型并可按路径过滤。\n\n输入输出与副作用：输入程序会话、可选路径片段和分页参数；返回名称、路径、长度与说明；只读。\n\n何时使用：查找可应用的现有类型时调用；查看某地址当前数据定义用 data_get。\n""",
+            """List program data types, paginated, optionally filtered by path.\n\nInputs/outputs and side effects: takes a program session, an optional path fragment, and pagination parameters; returns name, path, length, and description; read-only.\n\nWhen to use: call to find an existing type to apply; use data_get to see the current data definition at an address.\n""",
             data_types_list,
         ),
         ToolDefinition(
             "function_tags",
-            """列出指定函数已分配的标签。\n\n输入输出与副作用：输入程序会话和函数内地址；返回标签名称与说明；只读。\n\n何时使用：读取函数分类状态时调用；名称语义本身用 function_get。\n""",
+            """List the tags currently assigned to a function.\n\nInputs/outputs and side effects: takes a program session and an address inside a function; returns tag names and descriptions; read-only.\n\nWhen to use: call to read a function's classification state; use function_get for the meaning of the name itself.\n""",
             function_tags,
         ),
         ToolDefinition(
             "bookmarks_list",
-            """分页列出程序书签。\n\n输入输出与副作用：输入程序会话和分页参数；返回地址、类型、分类与说明；只读。\n\n何时使用：浏览人工标记的待办和关注点时调用；程序注释应使用 comments_list。\n""",
+            """List program bookmarks, paginated.\n\nInputs/outputs and side effects: takes a program session and pagination parameters; returns address, type, category, and description; read-only.\n\nWhen to use: call to browse manually marked to-dos and points of interest; use comments_list for analysis notes in the program itself.\n""",
             bookmarks_list,
         ),
     )

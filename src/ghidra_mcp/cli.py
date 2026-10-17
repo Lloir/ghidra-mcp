@@ -1,4 +1,4 @@
-"""ghidra-mcp 命令行入口。"""
+"""ghidra-mcp command-line entry point."""
 
 from .config import load_settings
 from .service import create_service

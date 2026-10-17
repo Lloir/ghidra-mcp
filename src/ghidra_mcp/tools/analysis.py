@@ -1,4 +1,4 @@
-"""反编译与函数图分析工具。"""
+"""Decompilation and function-graph analysis tools."""
 
 from itertools import islice
 from typing import Any
@@ -17,10 +17,10 @@ def _new_decompiler() -> Any:
 def _function(api: Any, address: str) -> Any:
     resolved = api.toAddr(address)
     if resolved is None:
-        raise ToolInputError(f"无法解析地址：{address}")
+        raise ToolInputError(f"could not resolve address: {address}")
     function = api.getFunctionContaining(resolved)
     if function is None:
-        raise ToolInputError(f"地址未包含在函数中：{address}")
+        raise ToolInputError(f"address is not contained in a function: {address}")
     return function
 
 
@@ -36,22 +36,22 @@ def register_analysis_tools(registry: ToolRegistry, workspace: ProgramWorkspace)
         max_chars: int = 50_000,
     ) -> dict[str, str | bool]:
         if not 1 <= timeout_seconds <= 300:
-            raise ToolInputError("timeout_seconds 必须在 1 到 300 之间")
+            raise ToolInputError("timeout_seconds must be between 1 and 300")
         if not 1 <= max_chars <= 200_000:
-            raise ToolInputError("max_chars 必须在 1 到 200000 之间")
+            raise ToolInputError("max_chars must be between 1 and 200000")
         api = workspace.get(program_id)
         program = api.getCurrentProgram()
         function = _function(api, address)
         decompiler = _new_decompiler()
         try:
             if not decompiler.openProgram(program):
-                raise RuntimeError(f"反编译器无法打开程序：{decompiler.getLastMessage()}")
+                raise RuntimeError(f"decompiler could not open the program: {decompiler.getLastMessage()}")
             results = decompiler.decompileFunction(function, timeout_seconds, None)
             if not results.decompileCompleted():
-                raise RuntimeError(f"反编译失败：{decompiler.getLastMessage()}")
+                raise RuntimeError(f"decompilation failed: {decompiler.getLastMessage()}")
             decompiled = results.getDecompiledFunction()
             if decompiled is None:
-                raise RuntimeError("反编译完成但没有生成 C 文本")
+                raise RuntimeError("decompilation completed but produced no C text")
             text = str(decompiled.getC())
             return {
                 **_identity(function),
@@ -63,7 +63,7 @@ def register_analysis_tools(registry: ToolRegistry, workspace: ProgramWorkspace)
 
     def call_graph(program_id: str, address: str, limit: int = 100) -> dict[str, object]:
         if not 1 <= limit <= 1000:
-            raise ToolInputError("limit 必须在 1 到 1000 之间")
+            raise ToolInputError("limit must be between 1 and 1000")
         api = workspace.get(program_id)
         function = _function(api, address)
         callers = list(islice(function.getCallingFunctions(None), limit + 1))
@@ -90,7 +90,9 @@ def register_analysis_tools(registry: ToolRegistry, workspace: ProgramWorkspace)
             )
         )
         if len(instructions) > 10_000:
-            raise RuntimeError("函数指令超过 10000 条，拒绝生成过大的控制流图")
+            raise RuntimeError(
+                "function has more than 10000 instructions; refusing to build an oversized control-flow graph"
+            )
         nodes = [str(instruction.getAddress()) for instruction in instructions]
         edges: list[dict[str, str]] = []
         has_computed_flow = False
@@ -151,31 +153,31 @@ def register_analysis_tools(registry: ToolRegistry, workspace: ProgramWorkspace)
     definitions = (
         ToolDefinition(
             "decompile_function",
-            """将包含指定地址的函数反编译为 C 风格文本。
+            """Decompile the function containing a given address to C-style text.
 
-输入输出与副作用：输入程序会话、函数内地址、1 到 300 秒超时和文本字符上限；返回函数身份、受限 C 文本及截断标记；只读并在调用后释放反编译器。
+Inputs/outputs and side effects: takes a program session, an address inside a function, a timeout between 1 and 300 seconds, and a text character cap; returns the function's identity, bounded C text, and a truncation flag; read-only, and releases the decompiler after the call.
 
-何时使用：理解函数高层语义时调用；核对具体机器指令时改用 instructions_list。
+When to use: call to understand a function's high-level semantics; use instructions_list to check concrete machine instructions.
 """,
             decompile_function,
         ),
         ToolDefinition(
             "call_graph",
-            """读取函数的一跳调用者与被调用者。
+            """Read a function's one-hop callers and callees.
 
-输入输出与副作用：输入程序会话、函数内地址和每个方向的结果上限；返回目标函数、受限调用者/被调用者及截断标记；只读。
+Inputs/outputs and side effects: takes a program session, an address inside a function, and a per-direction result cap; returns the target function, bounded callers/callees, and truncation flags; read-only.
 
-何时使用：定位调用关系和影响范围时调用；分析函数内部跳转结构时改用 control_flow_graph。
+When to use: call to locate call relationships and blast radius; use control_flow_graph to analyze the jump structure inside a function.
 """,
             call_graph,
         ),
         ToolDefinition(
             "control_flow_graph",
-            """构建函数的指令级控制流边集合。
+            """Build the instruction-level control-flow edge set for a function.
 
-输入输出与副作用：输入程序会话和函数内地址；返回函数体内已定义指令、带来源/置信度的边、覆盖范围与不完整状态；只读，拒绝超过 10000 条指令的图。
+Inputs/outputs and side effects: takes a program session and an address inside a function; returns the defined instructions in the function body, edges with provenance/confidence, coverage, and incompleteness status; read-only, and refuses to build a graph for a function with more than 10000 instructions.
 
-何时使用：分析分支、循环或混淆控制流时调用；跨函数调用关系应改用 call_graph。
+When to use: call to analyze branches, loops, or obfuscated control flow; use call_graph for cross-function call relationships.
 """,
             control_flow_graph,
             contract_version=2,

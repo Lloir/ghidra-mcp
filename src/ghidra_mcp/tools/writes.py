@@ -1,4 +1,4 @@
-"""函数、符号和注释的事务写工具。"""
+"""Transactional write tools for functions, symbols, and comments."""
 
 from typing import Any
 
@@ -20,7 +20,7 @@ def _comment_type(value: str) -> Any:
     try:
         return getattr(CommentType, value.upper())
     except AttributeError as error:
-        raise ToolInputError("kind 必须是 eol、pre、post、plate 或 repeatable") from error
+        raise ToolInputError("kind must be eol, pre, post, plate, or repeatable") from error
 
 
 def _address_set(start: Any, end: Any) -> Any:
@@ -39,14 +39,14 @@ def _body_ranges(body: Any) -> list[dict[str, str]]:
 def _address(api: Any, value: str) -> Any:
     address = api.toAddr(value)
     if address is None:
-        raise ToolInputError(f"无法解析地址：{value}")
+        raise ToolInputError(f"could not resolve address: {value}")
     return address
 
 
 def _name(value: str) -> str:
     name = value.strip()
     if not name:
-        raise ToolInputError("name 不得为空")
+        raise ToolInputError("name must not be empty")
     return name
 
 
@@ -56,7 +56,7 @@ def register_write_tools(registry: ToolRegistry, workspace: ProgramWorkspace) ->
         resolved = _address(api, address)
         function = api.getFunctionContaining(resolved)
         if function is None:
-            raise ToolInputError(f"地址未包含在函数中：{address}")
+            raise ToolInputError(f"address is not contained in a function: {address}")
         program = api.getCurrentProgram()
         old_name = str(function.getName())
         new_name = _name(name)
@@ -76,7 +76,7 @@ def register_write_tools(registry: ToolRegistry, workspace: ProgramWorkspace) ->
         program = api.getCurrentProgram()
         symbol = program.getSymbolTable().getPrimarySymbol(resolved)
         if symbol is None:
-            raise ToolInputError(f"地址没有主符号：{address}")
+            raise ToolInputError(f"address has no primary symbol: {address}")
         old_name = str(symbol.getName())
         new_name = _name(name)
         with program_transaction(
@@ -107,7 +107,7 @@ def register_write_tools(registry: ToolRegistry, workspace: ProgramWorkspace) ->
         api = workspace.get(program_id)
         resolved = _address(api, address)
         if api.getFunctionAt(resolved) is not None:
-            raise ToolInputError(f"地址已有函数：{address}")
+            raise ToolInputError(f"address already has a function: {address}")
         program = api.getCurrentProgram()
         new_name = _name(name)
         with program_transaction(
@@ -115,7 +115,7 @@ def register_write_tools(registry: ToolRegistry, workspace: ProgramWorkspace) ->
         ):
             function = api.createFunction(resolved, new_name)
             if function is None:
-                raise RuntimeError(f"Ghidra 未能在 {address} 创建函数")
+                raise RuntimeError(f"Ghidra failed to create a function at {address}")
         return {"name": str(function.getName()), "entry_point": str(function.getEntryPoint())}
 
     def function_delete(program_id: str, address: str) -> dict[str, str]:
@@ -123,7 +123,7 @@ def register_write_tools(registry: ToolRegistry, workspace: ProgramWorkspace) ->
         resolved = _address(api, address)
         function = api.getFunctionAt(resolved)
         if function is None:
-            raise ToolInputError(f"地址不是函数入口：{address}")
+            raise ToolInputError(f"address is not a function entry point: {address}")
         entry_point = str(function.getEntryPoint())
         program = api.getCurrentProgram()
         with program_transaction(
@@ -140,10 +140,10 @@ def register_write_tools(registry: ToolRegistry, workspace: ProgramWorkspace) ->
         resolved_start = _address(api, start)
         resolved_end = _address(api, end)
         if resolved_start.compareTo(resolved_end) > 0:
-            raise ToolInputError("start 不得大于 end")
+            raise ToolInputError("start must not be greater than end")
         function = api.getFunctionAt(resolved_entry)
         if function is None:
-            raise ToolInputError(f"地址不是函数入口：{entry_point}")
+            raise ToolInputError(f"address is not a function entry point: {entry_point}")
         previous_body = function.getBody()
         previous_ranges = _body_ranges(previous_body)
         new_body = previous_body.union(_address_set(resolved_start, resolved_end))
@@ -162,61 +162,61 @@ def register_write_tools(registry: ToolRegistry, workspace: ProgramWorkspace) ->
     definitions = (
         ToolDefinition(
             "function_rename",
-            """重命名包含指定地址的函数。
+            """Rename the function containing a given address.
 
-输入输出与副作用：输入程序会话、函数内地址和新名称；返回入口与新旧名称；在单个 Ghidra 事务中修改并在失败时回滚。
+Inputs/outputs and side effects: takes a program session, an address inside a function, and the new name; returns the entry point and old/new names; modifies within a single Ghidra transaction, rolling back on failure.
 
-何时使用：已确认函数语义后赋予稳定名称；只需改非函数标签时改用 symbol_rename。
+When to use: use once you've confirmed a function's semantics and want to give it a stable name; use symbol_rename if you only need to change a non-function label.
 """,
             function_rename,
         ),
         ToolDefinition(
             "symbol_rename",
-            """重命名指定地址的主符号。
+            """Rename the primary symbol at a given address.
 
-输入输出与副作用：输入程序会话、符号地址和新名称；返回地址与新旧名称；在单个事务中修改并在失败时回滚。
+Inputs/outputs and side effects: takes a program session, a symbol address, and the new name; returns the address and old/new names; modifies within a single transaction, rolling back on failure.
 
-何时使用：修改标签、数据或外部符号名称；目标是函数语义名称时优先使用 function_rename。
+When to use: use to change a label, data, or external symbol's name; prefer function_rename when the target is a function's semantic name.
 """,
             symbol_rename,
         ),
         ToolDefinition(
             "comment_set",
-            """设置或删除指定地址的一类注释。
+            """Set or delete one kind of comment at a given address.
 
-输入输出与副作用：输入程序会话、地址、注释类型和文本；返回写入内容，text 为 null 时删除；事务失败自动回滚。
+Inputs/outputs and side effects: takes a program session, address, comment kind, and text; returns what was written, deleting the comment when text is null; the transaction rolls back automatically on failure.
 
-何时使用：保存可验证分析结论；重命名实体时改用 function_rename 或 symbol_rename。
+When to use: use to save verifiable analysis conclusions; use function_rename or symbol_rename when renaming an entity instead.
 """,
             comment_set,
         ),
         ToolDefinition(
             "function_create",
-            """在尚无函数的入口地址创建命名函数。
+            """Create a named function at an entry address that does not yet have one.
 
-输入输出与副作用：输入程序会话、入口地址和名称；返回新函数名称与入口；事务失败自动回滚。
+Inputs/outputs and side effects: takes a program session, entry address, and name; returns the new function's name and entry point; the transaction rolls back automatically on failure.
 
-何时使用：分析遗漏但已确认代码入口时调用；入口已有函数时改用 function_rename。
+When to use: call when analysis missed a confirmed code entry point; use function_rename if the entry already has a function.
 """,
             function_create,
         ),
         ToolDefinition(
             "function_delete",
-            """删除入口地址精确匹配的函数定义。
+            """Delete the function definition whose entry point exactly matches the given address.
 
-输入输出与副作用：输入程序会话和函数入口；返回删除的入口；事务失败自动回滚，不删除底层字节。
+Inputs/outputs and side effects: takes a program session and a function entry point; returns the deleted entry point; the transaction rolls back automatically on failure, and the underlying bytes are not deleted.
 
-何时使用：确认函数定义错误或误识别时调用；仅需改名时不要删除，改用 function_rename。
+When to use: call when a function definition is confirmed wrong or misidentified; do not delete just to rename — use function_rename for that.
 """,
             function_delete,
         ),
         ToolDefinition(
             "function_body_add",
-            """向入口地址精确匹配的函数体添加一个已确认的地址范围。
+            """Add one confirmed address range to the body of the function whose entry point exactly matches the given address.
 
-输入输出与副作用：输入程序会话、函数入口和闭区间起止地址；返回新增范围及修改前后的完整函数体范围；在单个事务中修改并保存，范围与其他函数重叠时由 Ghidra 拒绝并回滚。
+Inputs/outputs and side effects: takes a program session, a function entry point, and an inclusive start/end address range; returns the added range plus the function's body ranges before and after; modifies and saves within a single transaction, and Ghidra rejects (rolling back) a range that overlaps another function.
 
-何时使用：已用控制流证据确认 detached continuation 属于目标函数时调用；归属尚不确定时先用 function_get，不得凭邻近地址猜测。
+When to use: call once control-flow evidence confirms a detached continuation belongs to the target function; use function_get first when attribution is still uncertain — never guess from a nearby address.
 """,
             function_body_add,
         ),

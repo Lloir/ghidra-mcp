@@ -206,7 +206,7 @@ def test_inspection_page_does_not_consume_past_requested_window():
     def guarded():
         yield "skip"
         yield "first"
-        raise AssertionError("分页读取越过 offset + limit")
+        raise AssertionError("pagination read went past offset + limit")
 
     assert _page(guarded(), 1, 1) == ["first"]
 
@@ -216,11 +216,11 @@ def test_comments_and_pcode_stop_after_limit(monkeypatch):
 
     def guarded_addresses(_self, _memory, _forward):
         yield "00400010"
-        raise AssertionError("注释读取越过 limit")
+        raise AssertionError("comment read went past limit")
 
     def guarded_instructions(_self, _body, _forward):
         yield FakeInstruction()
-        raise AssertionError("P-code 读取越过 limit")
+        raise AssertionError("P-code read went past limit")
 
     monkeypatch.setattr(FakeListing, "getCommentAddressIterator", guarded_addresses)
     monkeypatch.setattr(FakeListing, "getInstructions", guarded_instructions)

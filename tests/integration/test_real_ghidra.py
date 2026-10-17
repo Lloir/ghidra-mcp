@@ -16,14 +16,14 @@ def test_real_elf_shared_libraries_cover_read_decompile_write_and_reopen(
 ) -> None:
     install_value = os.environ.get("GHIDRA_INSTALL_DIR")
     if not install_value:
-        pytest.skip("GHIDRA_INSTALL_DIR 未配置")
+        pytest.skip("GHIDRA_INSTALL_DIR not configured")
     samples = (
         (FIXTURES / "libsymbolic.so", "fixture_symbolic"),
         (FIXTURES / "libstripped.so", "fixture_checksum"),
         (FIXTURES / "libcontrol_flow.so", "fixture_control_flow"),
     )
     if any(not sample.is_file() for sample, _ in samples):
-        pytest.skip("先运行 scripts/build_fixtures.py")
+        pytest.skip("run scripts/build_fixtures.py first")
 
     workspace = ProgramWorkspace(
         GhidraRuntime(Path(install_value)), project_location=tmp_path / "projects"
@@ -66,12 +66,12 @@ def test_real_elf_shared_libraries_cover_read_decompile_write_and_reopen(
                 int(edge["to"], 16) < int(edge["from"], 16)
                 for edge in graph["edges"]
                 if edge["kind"] in {"direct_flow", "inferred_flow", "computed_flow"}
-            ), "控制流夹具必须保留循环回边"
+            ), "control-flow fixture must preserve the loop back-edge"
             assert any(
                 instruction["mnemonic"].upper() == "CALL"
                 and any("[" in operand for operand in instruction["operands"])
                 for instruction in instructions
-            ), "控制流夹具必须保留间接调用"
+            ), "control-flow fixture must preserve the indirect call"
         data = tools["data_list"](program_id, limit=20)
         if data:
             assert (

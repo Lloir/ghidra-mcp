@@ -184,7 +184,7 @@ def test_navigation_tools_reject_invalid_bounds_and_addresses() -> None:
 
     with pytest.raises(ToolInputError, match="length"):
         tools["memory_read"]("program-1", "00400000", 0)
-    with pytest.raises(ToolInputError, match="地址"):
+    with pytest.raises(ToolInputError, match="address"):
         tools["memory_read"]("program-1", "invalid", 3)
     with pytest.raises(ToolInputError, match="unit_size"):
         tools["memory_read"]("program-1", "00400000", 3, interpret=True, unit_size=3)
@@ -199,7 +199,7 @@ def test_functions_list_stops_after_limit(monkeypatch: pytest.MonkeyPatch) -> No
 
     def guarded(_self, _forward):
         yield FakeFunction("entry", "00400010")
-        raise AssertionError("函数分页读取越过 limit")
+        raise AssertionError("function pagination read went past limit")
 
     monkeypatch.setattr(FakeFunctionManager, "getFunctions", guarded)
     registry = ToolRegistry()

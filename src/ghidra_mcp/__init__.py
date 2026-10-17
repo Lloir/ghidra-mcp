@@ -1,1 +1,1 @@
-"""Ghidra MCP 净室实现。"""
+"""Clean-room implementation of Ghidra MCP."""

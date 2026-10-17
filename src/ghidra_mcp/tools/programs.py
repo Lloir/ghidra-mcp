@@ -1,4 +1,4 @@
-"""程序会话生命周期工具。"""
+"""Program session lifecycle tools."""
 
 from pathlib import Path
 
@@ -42,41 +42,41 @@ def register_program_tools(registry: ToolRegistry, workspace: ProgramWorkspace) 
     definitions = (
         ToolDefinition(
             "program_open",
-            """打开二进制并建立独立程序会话。
+            """Open a binary and establish an independent program session.
 
-输入输出与副作用：输入本地二进制路径和是否分析；返回程序会话标识与规范路径；会创建或打开 Ghidra 项目数据。
+Inputs/outputs and side effects: takes a local binary path and whether to analyze; returns the program session id and canonical path; creates or opens Ghidra project data.
 
-何时使用：分析任何二进制前首先调用；已有会话时改用 program_list，不要重复打开。
+When to use: call before analyzing any binary; if a session already exists, use program_list instead of opening again.
 """,
             program_open,
         ),
         ToolDefinition(
             "program_list",
-            """列出当前进程拥有的程序会话。
+            """List the program sessions owned by the current process.
 
-输入输出与副作用：无输入；返回程序会话标识与二进制路径列表；只读。
+Inputs/outputs and side effects: no input; returns a list of program session ids and binary paths; read-only.
 
-何时使用：恢复上下文或选择目标程序时调用；需要程序架构详情时改用 program_info。
+When to use: call to recover context or pick a target program; use program_info for architecture details on a specific program.
 """,
             program_list,
         ),
         ToolDefinition(
             "program_info",
-            """读取一个程序的格式、语言和地址范围。
+            """Read a program's format, language, and address range.
 
-输入输出与副作用：输入程序会话标识；返回名称、语言、编译器、格式和地址边界；只读。
+Inputs/outputs and side effects: takes a program session id; returns name, language, compiler, format, and address bounds; read-only.
 
-何时使用：开始分析时建立程序级上下文；只需寻找现有会话时改用 program_list。
+When to use: call to establish program-level context at the start of analysis; use program_list if you only need to find an existing session.
 """,
             program_info,
         ),
         ToolDefinition(
             "program_close",
-            """关闭程序会话并释放对应 Ghidra 上下文。
+            """Close a program session and release its Ghidra context.
 
-输入输出与副作用：输入程序会话标识；返回已关闭标识；先保存项目，保存成功后才关闭并释放资源；保存失败时保留会话并返回错误。
+Inputs/outputs and side effects: takes a program session id; returns the closed id; saves the project first, only closing and releasing resources after a successful save; the session is kept if saving fails and an error is returned.
 
-何时使用：完成该程序的全部操作后调用；仍需继续读取或修改时不要关闭。
+When to use: call after finishing all work on a program; do not close while you still need to read or modify it.
 """,
             program_close,
             annotations=ToolAnnotations(
@@ -88,11 +88,11 @@ def register_program_tools(registry: ToolRegistry, workspace: ProgramWorkspace) 
         ),
         ToolDefinition(
             "program_open_raw",
-            """以显式语言、编译器和基址打开 program_open 无法自动识别的裸二进制（例如固件原始镶像、无格式头的闪存转储）。
+            """Open a raw binary that program_open could not auto-detect (e.g. a firmware image or a headerless flash dump) with an explicit language, compiler, and base address.
 
-输入输出与副作用：输入本地二进制路径、Ghidra 语言 ID（如 ARM:LE:32:Cortex）、基址（十六进制字符串，如 0x88000000）及可选编译器 ID（默认 default）和是否分析；返回程序会话标识与规范路径；会创建或打开 Ghidra 项目数据，与 program_open 共用同一套持久化项目命名规则，因此同一文件只会被导入一次。
+Inputs/outputs and side effects: takes a local binary path, a Ghidra language id (e.g. ARM:LE:32:Cortex), a base address (hex string, e.g. 0x88000000), and an optional compiler id (default "default") and whether to analyze; returns the program session id and canonical path; creates or opens Ghidra project data, sharing the same persistent project naming as program_open, so the same file is only ever imported once.
 
-何时使用：program_open 因“No load spec found”等自动识别失败而报错时调用；已经从文档、ROM 头或字符串中获知目标架构与加载基址时使用；architecture 或基址未知时，先用 file_strings/file_hexdump 调查线索，不要凭空猜测。
+When to use: call when program_open fails with "No load spec found" or similar auto-detection errors, and you already know the target architecture and load address (from documentation, a ROM header, or strings found in the file); if the architecture or base address is unknown, use file_strings/file_hexdump first to investigate rather than guessing.
 """,
             program_open_raw,
         ),

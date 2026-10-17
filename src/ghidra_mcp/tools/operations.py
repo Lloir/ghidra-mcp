@@ -1,4 +1,4 @@
-"""搜索、分析和分类写入工具。"""
+"""Search, analysis, and classification write tools."""
 
 from typing import Any
 
@@ -11,14 +11,14 @@ from .navigation import ToolInputError
 def _address(api: Any, value: str) -> Any:
     resolved = api.toAddr(value)
     if resolved is None:
-        raise ToolInputError(f"无法解析地址：{value}")
+        raise ToolInputError(f"could not resolve address: {value}")
     return resolved
 
 
 def _data_type(program: Any, path: str) -> Any:
     value = program.getDataTypeManager().getDataType(path)
     if value is None:
-        raise ToolInputError(f"数据类型不存在：{path}")
+        raise ToolInputError(f"data type does not exist: {path}")
     return value
 
 
@@ -36,11 +36,11 @@ def register_operation_tools(registry: ToolRegistry, workspace: ProgramWorkspace
         try:
             pattern = bytes.fromhex(hex_pattern)
         except ValueError as error:
-            raise ToolInputError("hex_pattern 必须是偶数位十六进制字节") from error
+            raise ToolInputError("hex_pattern must be an even number of hex digits") from error
         if not pattern or len(pattern) > 4096:
-            raise ToolInputError("十六进制模式长度必须在 1 到 4096 字节之间")
+            raise ToolInputError("hex pattern length must be between 1 and 4096 bytes")
         if not 1 <= max_results <= 1000:
-            raise ToolInputError("max_results 必须在 1 到 1000 之间")
+            raise ToolInputError("max_results must be between 1 and 1000")
         api = workspace.get(program_id)
         results: list[str] = []
         scanned = 0
@@ -105,14 +105,14 @@ def register_operation_tools(registry: ToolRegistry, workspace: ProgramWorkspace
         program_id: str, address: str, action: str, name: str
     ) -> dict[str, object]:
         if action not in {"add", "remove"}:
-            raise ToolInputError("action 必须是 add 或 remove")
+            raise ToolInputError("action must be add or remove")
         normalized = name.strip()
         if not normalized:
-            raise ToolInputError("name 不得为空")
+            raise ToolInputError("name must not be empty")
         api = workspace.get(program_id)
         function = api.getFunctionContaining(_address(api, address))
         if function is None:
-            raise ToolInputError(f"地址未包含在函数中：{address}")
+            raise ToolInputError(f"address is not contained in a function: {address}")
         program = api.getCurrentProgram()
         with program_transaction(
             program, "Update function tag", persist=lambda: workspace.save(program_id)
@@ -147,32 +147,32 @@ def register_operation_tools(registry: ToolRegistry, workspace: ProgramWorkspace
     definitions = (
         ToolDefinition(
             "memory_search",
-            """在已初始化内存中搜索精确字节模式。\n\n输入输出与副作用：输入程序会话、十六进制模式和结果上限；返回匹配地址，单次最多扫描 64 MiB；只读。\n\n何时使用：按机器码、常量或文件签名定位地址时调用；已知地址读取内容用 memory_read，文本线索用 strings_list。\n""",
+            """Search initialized memory for an exact byte pattern.\n\nInputs/outputs and side effects: takes a program session, a hex pattern, and a result cap; returns matching addresses, scanning at most 64 MiB per call; read-only.\n\nWhen to use: call to locate addresses by machine code, constants, or file signatures; use memory_read to read content at a known address, and strings_list for textual clues.\n""",
             memory_search,
         ),
         ToolDefinition(
             "analysis_run",
-            """对已打开程序同步运行 Ghidra 自动分析。\n\n输入输出与副作用：输入程序会话；返回分析前后函数数；按配置期限执行，超时或持久化失败时回滚本次分析。\n\n何时使用：以 analyze=false 打开后补分析或修改定义后重分析；首次打开通常直接让 program_open 执行分析。\n""",
+            """Synchronously run Ghidra auto-analysis on an already-open program.\n\nInputs/outputs and side effects: takes a program session; returns the function count before and after; runs within the configured time limit, rolling back this analysis pass on timeout or persistence failure.\n\nWhen to use: call to analyze after opening with analyze=false, or to re-analyze after modifying definitions; on first open, let program_open run analysis directly instead.\n""",
             analysis_run,
         ),
         ToolDefinition(
             "data_type_get",
-            """按完整路径读取一个数据类型。\n\n输入输出与副作用：输入程序会话和类型路径；返回名称、路径、长度与说明；只读。\n\n何时使用：应用类型前核对精确定义；按片段发现候选类型用 data_types_list。\n""",
+            """Read a data type by its full path.\n\nInputs/outputs and side effects: takes a program session and a type path; returns name, path, length, and description; read-only.\n\nWhen to use: use to confirm a type's exact definition before applying it; use data_types_list to discover candidate types by fragment.\n""",
             data_type_get,
         ),
         ToolDefinition(
             "data_type_apply",
-            """在指定地址创建现有数据类型定义。\n\n输入输出与副作用：输入程序会话、地址和完整类型路径；返回创建的数据定义；事务失败自动回滚且不主动清除冲突代码单元。\n\n何时使用：已确认地址与类型且无冲突定义时调用；先发现类型用 data_types_list，查看现有定义用 data_get。\n""",
+            """Create an existing data type definition at a given address.\n\nInputs/outputs and side effects: takes a program session, address, and full type path; returns the created data definition; the transaction rolls back automatically on failure and does not proactively clear conflicting code units.\n\nWhen to use: call once the address and type are confirmed and no conflicting definition exists; find the type first with data_types_list, and check the existing definition with data_get.\n""",
             data_type_apply,
         ),
         ToolDefinition(
             "function_tag_update",
-            """精确添加或移除函数标签。\n\n输入输出与副作用：输入程序会话、函数内地址、add/remove 和完整标签名；返回更新后标签；事务失败自动回滚。\n\n何时使用：维护客观函数分类时调用；读取标签用 function_tags，修改函数名用 function_rename。\n""",
+            """Precisely add or remove a function tag.\n\nInputs/outputs and side effects: takes a program session, an address inside a function, add/remove, and the exact tag name; returns the updated tags; the transaction rolls back automatically on failure.\n\nWhen to use: call to maintain objective function classification; read tags with function_tags, and rename a function with function_rename.\n""",
             function_tag_update,
         ),
         ToolDefinition(
             "bookmark_set",
-            """设置或删除指定地址的书签。\n\n输入输出与副作用：输入程序会话、地址、类型、分类和注释；comment 为 null 时删除精确匹配书签；事务失败自动回滚。\n\n何时使用：记录待办或审查锚点时调用；保存分析正文用 comment_set。\n""",
+            """Set or delete a bookmark at a given address.\n\nInputs/outputs and side effects: takes a program session, address, type, category, and comment; a null comment deletes the exact matching bookmark; the transaction rolls back automatically on failure.\n\nWhen to use: call to record to-dos or review anchors; use comment_set to save analysis findings in the program body.\n""",
             bookmark_set,
         ),
     )

@@ -1,4 +1,4 @@
-"""默认工具集的唯一装配入口。"""
+"""The single assembly point for the default tool set."""
 
 from .registry import ToolRegistry
 from .runtime import ProgramWorkspace

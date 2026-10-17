@@ -222,7 +222,7 @@ def test_function_body_add_requires_exact_function_entry(
 ) -> None:
     tools = _tools(FakeWorkspace(), monkeypatch)
 
-    with pytest.raises(Exception, match="函数入口"):
+    with pytest.raises(Exception, match="function entry point"):
         tools["function_body_add"]("program-1", "00400011", "00400030", "0040003f")
 
 

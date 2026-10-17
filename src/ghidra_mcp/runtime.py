@@ -1,4 +1,4 @@
-"""PyGhidra JVM 与已打开程序的生命周期所有权。"""
+"""PyGhidra JVM ownership and lifecycle for opened programs."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from uuid import uuid4
 
 
 class WorkspaceError(RuntimeError):
-    """程序工作区操作失败。"""
+    """A program workspace operation failed."""
 
 
 _MINIMUM_GHIDRA_VERSION = (12, 1, 2)
@@ -27,7 +27,7 @@ def _read_ghidra_version(install_dir: Path) -> tuple[int, int, int]:
     try:
         lines = properties.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeError) as error:
-        raise WorkspaceError(f"无法确认 Ghidra 版本：未能读取 {properties}") from error
+        raise WorkspaceError(f"Unable to determine Ghidra version: failed to read {properties}") from error
     for line in lines:
         key, separator, value = line.partition("=")
         if separator and key.strip() == "application.version":
@@ -36,7 +36,9 @@ def _read_ghidra_version(install_dir: Path) -> tuple[int, int, int]:
                 major, minor, patch = match.groups()
                 return int(major), int(minor), int(patch or 0)
             break
-    raise WorkspaceError(f"无法确认 Ghidra 版本：{properties} 缺少有效的 application.version")
+    raise WorkspaceError(
+        f"Unable to determine Ghidra version: {properties} is missing a valid application.version"
+    )
 
 
 @dataclass(slots=True)
@@ -68,11 +70,13 @@ class GhidraRuntime:
         with self._lock:
             if self._launcher is None:
                 if not self.install_dir.is_dir():
-                    raise WorkspaceError(f"Ghidra 安装目录不存在：{self.install_dir}")
+                    raise WorkspaceError(f"Ghidra installation directory does not exist: {self.install_dir}")
                 version = _read_ghidra_version(self.install_dir)
                 if version < _MINIMUM_GHIDRA_VERSION:
                     detected = ".".join(str(part) for part in version)
-                    raise WorkspaceError(f"Ghidra {detected} 低于安全最低版本 12.1.2")
+                    raise WorkspaceError(
+                        f"Ghidra {detected} is below the minimum supported version 12.1.2"
+                    )
                 self._launcher = self.pyghidra.start(install_dir=self.install_dir)
             return self._launcher
 
@@ -82,7 +86,7 @@ class GhidraRuntime:
         monitor = self.pyghidra.task_monitor(self.analysis_timeout_seconds)
         self.pyghidra.analyze(program, monitor=monitor)
         if monitor.isCancelled() and monotonic() >= deadline:
-            raise TimeoutError(f"Ghidra 自动分析超过 {self.analysis_timeout_seconds} 秒")
+            raise TimeoutError(f"Ghidra auto-analysis exceeded {self.analysis_timeout_seconds} seconds")
 
     def program_context(
         self,
@@ -202,11 +206,13 @@ class GhidraRuntime:
         base_address: str,
         analyze: bool,
     ) -> Iterator[Any]:
-        """以显式语言/基址加载无法被自动识别的裸二进制（例如固件原始镶像）。
+        """Load a raw binary that cannot be auto-recognized (e.g. a firmware image)
+        with an explicit language and base address.
 
-        与 ``_modern_program_context`` 共享“已有会话优先”的语义：如果该项目路径下
-        已存在同名已导入程序（无论是之前用本方法还是 ``program_open`` 创建的），
-        直接复用，不再重新导入。
+        Shares the "existing session first" semantics of ``_modern_program_context``:
+        if a program is already imported at this project path (whether created
+        earlier by this method or by ``program_open``), it is reused rather than
+        re-imported.
         """
 
         location = project_location or binary.parent
@@ -258,11 +264,13 @@ class GhidraRuntime:
             project.close()
 
     def _rebase(self, program: Any, base_address: str) -> None:
-        """将新导入的程序移动到调用方给出的基址。
+        """Move a freshly imported program to the caller-supplied base address.
 
-        BinaryLoader 的 "Base Address" 导入选项不能通过字符串参数对可靠地设置
-        （已通过实测确认），因此改用标准做法：先以默认基址（0）导入，再在事务中
-        调用 ``Program.setImageBase`` 整体平移。
+        BinaryLoader's "Base Address" import option cannot be set reliably
+        through the string-pair importer API (confirmed by live testing), so
+        this uses the standard workaround instead: import at the default base
+        (0), then call ``Program.setImageBase`` inside a transaction to shift
+        the whole program.
         """
 
         normalized = base_address[2:] if base_address.lower().startswith("0x") else base_address
@@ -287,7 +295,7 @@ class GhidraRuntime:
         return Object()
 
     def save(self, api: Any) -> None:
-        """在工具返回成功前持久化当前程序数据库。"""
+        """Persist the current program database before the tool reports success."""
 
         api.getCurrentProgram().save("ghidra-mcp", self.pyghidra.task_monitor())
 
@@ -319,13 +327,14 @@ class ProgramWorkspace:
         self._lock = RLock()
 
     def resolve_input(self, binary_path: Path) -> Path:
-        """验证并解析输入路径；供需要直接读取字节的工具（而非仅限程序导入）复用。"""
+        """Validate and resolve an input path; shared by tools that need to read
+        raw bytes directly, not just by program import."""
 
         binary = binary_path.resolve()
         if self.input_root is not None and not binary.is_relative_to(self.input_root):
-            raise WorkspaceError(f"输入路径超出允许的输入根目录：{self.input_root}")
+            raise WorkspaceError(f"input path is outside the allowed input root: {self.input_root}")
         if not binary.is_file():
-            raise WorkspaceError(f"输入二进制不存在：{binary}")
+            raise WorkspaceError(f"input binary does not exist: {binary}")
         return binary
 
     def open(
@@ -369,11 +378,13 @@ class ProgramWorkspace:
         project_location: Path | None = None,
         analyze: bool = True,
     ) -> str:
-        """以显式语言/基址打开 ``program_open`` 自动识别失败的裸二进制。
+        """Open a raw binary that ``program_open``'s auto-detection failed on,
+        using an explicit language and base address.
 
-        项目命名与存放位置与 ``open`` 完全一致（同一路径的二进制始终映射到同一个
-        持久化项目），因此之后无论调用 ``open`` 还是 ``open_raw``，都会找到同一个
-        已导入的程序，不会重复导入。
+        Project naming and location exactly match ``open`` (the same binary
+        path always maps to the same persistent project), so whichever of
+        ``open`` or ``open_raw`` is called afterwards finds the same already-
+        imported program, never re-importing it.
         """
 
         binary = self.resolve_input(binary_path)
@@ -408,7 +419,7 @@ class ProgramWorkspace:
             try:
                 return self._programs[program_id].api
             except KeyError as error:
-                raise WorkspaceError(f"程序会话不存在：{program_id}") from error
+                raise WorkspaceError(f"program session does not exist: {program_id}") from error
 
     def list_open(self) -> list[dict[str, str]]:
         with self._lock:
@@ -435,7 +446,7 @@ class ProgramWorkspace:
             try:
                 record = self._programs[program_id]
             except KeyError as error:
-                raise WorkspaceError(f"程序会话不存在：{program_id}") from error
+                raise WorkspaceError(f"program session does not exist: {program_id}") from error
             self.runtime.save(record.api)
             del self._programs[program_id]
             record.context.__exit__(None, None, None)
@@ -458,4 +469,4 @@ class ProgramWorkspace:
         if len(failures) == 1:
             raise failures[0]
         if failures:
-            raise BaseExceptionGroup("关闭多个程序会话失败", failures)
+            raise BaseExceptionGroup("failed to close one or more program sessions", failures)

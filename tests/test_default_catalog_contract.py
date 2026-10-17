@@ -49,8 +49,8 @@ def test_default_catalog_has_one_registration_path_and_no_placeholders() -> None
         "file_hexdump",
     ]
     assert all(callable(tool.handler) for tool in definitions)
-    assert all("输入输出与副作用：" in tool.description for tool in definitions)
-    assert all("何时使用：" in tool.description for tool in definitions)
+    assert all("Inputs/outputs and side effects:" in tool.description for tool in definitions)
+    assert all("When to use:" in tool.description for tool in definitions)
 
     app = create_mcp_app(registry, host="127.0.0.1", port=8765)
     exposed = asyncio.run(app.list_tools())
