@@ -26,7 +26,7 @@ def test_service_builds_default_catalog_without_starting_jvm(tmp_path: Path) -> 
     service = create_service(settings, pyghidra_module=fake)
     tools = asyncio.run(service.app.list_tools())
 
-    assert len(tools) == 35
+    assert len(tools) == 38
     assert fake.started is False
     assert service.settings is settings
     assert service.workspace.project_location == storage_root.resolve()

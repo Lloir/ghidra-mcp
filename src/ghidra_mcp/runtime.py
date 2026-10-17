@@ -158,6 +158,124 @@ class GhidraRuntime:
         finally:
             project.close()
 
+    def program_context_raw(
+        self,
+        binary: Path,
+        *,
+        project_location: Path | None,
+        project_name: str | None,
+        language_id: str,
+        compiler_id: str,
+        base_address: str,
+        analyze: bool,
+    ) -> Any:
+        test_factory = getattr(self.pyghidra, "_program_context_raw_factory", None)
+        if test_factory is not None:
+            return test_factory(
+                binary,
+                project_location=project_location,
+                project_name=project_name,
+                language_id=language_id,
+                compiler_id=compiler_id,
+                base_address=base_address,
+                analyze=analyze,
+            )
+        return self._modern_program_context_raw(
+            binary,
+            project_location=project_location,
+            project_name=project_name,
+            language_id=language_id,
+            compiler_id=compiler_id,
+            base_address=base_address,
+            analyze=analyze,
+        )
+
+    @contextmanager
+    def _modern_program_context_raw(
+        self,
+        binary: Path,
+        *,
+        project_location: Path | None,
+        project_name: str | None,
+        language_id: str,
+        compiler_id: str,
+        base_address: str,
+        analyze: bool,
+    ) -> Iterator[Any]:
+        """以显式语言/基址加载无法被自动识别的裸二进制（例如固件原始镶像）。
+
+        与 ``_modern_program_context`` 共享“已有会话优先”的语义：如果该项目路径下
+        已存在同名已导入程序（无论是之前用本方法还是 ``program_open`` 创建的），
+        直接复用，不再重新导入。
+        """
+
+        location = project_location or binary.parent
+        name = project_name or f"{binary.name}_ghidra"
+        project = self.pyghidra.open_project(location, name, create=True)
+        project_path = f"/{binary.name}"
+        try:
+            existing_context = self.pyghidra.program_context(project, project_path)
+            try:
+                program = existing_context.__enter__()
+            except FileNotFoundError:
+                pass
+            else:
+                try:
+                    if analyze:
+                        self.analyze(program)
+                    yield self._flat_api(program)
+                except BaseException:
+                    if not existing_context.__exit__(*sys.exc_info()):
+                        raise
+                else:
+                    existing_context.__exit__(None, None, None)
+                return
+
+            from ghidra.app.util.opinion import BinaryLoader
+
+            results = (
+                self.pyghidra.program_loader()
+                .source(str(binary))
+                .project(project)
+                .name(binary.name)
+                .loaders(BinaryLoader)
+                .language(language_id)
+                .compiler(compiler_id)
+                .load()
+            )
+            consumer = self._new_consumer()
+            program = results.getPrimaryDomainObject(consumer)
+            try:
+                self._rebase(program, base_address)
+                if analyze:
+                    self.analyze(program)
+                results.save(self.pyghidra.task_monitor())
+                yield self._flat_api(program)
+            finally:
+                program.release(consumer)
+                results.close()
+        finally:
+            project.close()
+
+    def _rebase(self, program: Any, base_address: str) -> None:
+        """将新导入的程序移动到调用方给出的基址。
+
+        BinaryLoader 的 "Base Address" 导入选项不能通过字符串参数对可靠地设置
+        （已通过实测确认），因此改用标准做法：先以默认基址（0）导入，再在事务中
+        调用 ``Program.setImageBase`` 整体平移。
+        """
+
+        normalized = base_address[2:] if base_address.lower().startswith("0x") else base_address
+        address_factory = program.getAddressFactory()
+        target = address_factory.getDefaultAddressSpace().getAddress(normalized)
+        transaction_id = program.startTransaction("ghidra-mcp: set image base")
+        committed = False
+        try:
+            program.setImageBase(target, True)
+            committed = True
+        finally:
+            program.endTransaction(transaction_id, committed)
+
     def _flat_api(self, program: Any) -> Any:
         from ghidra.program.flatapi import FlatProgramAPI
 
@@ -200,6 +318,16 @@ class ProgramWorkspace:
         self._programs: dict[str, _ProgramRecord] = {}
         self._lock = RLock()
 
+    def resolve_input(self, binary_path: Path) -> Path:
+        """验证并解析输入路径；供需要直接读取字节的工具（而非仅限程序导入）复用。"""
+
+        binary = binary_path.resolve()
+        if self.input_root is not None and not binary.is_relative_to(self.input_root):
+            raise WorkspaceError(f"输入路径超出允许的输入根目录：{self.input_root}")
+        if not binary.is_file():
+            raise WorkspaceError(f"输入二进制不存在：{binary}")
+        return binary
+
     def open(
         self,
         binary_path: Path,
@@ -207,11 +335,7 @@ class ProgramWorkspace:
         project_location: Path | None = None,
         analyze: bool = True,
     ) -> str:
-        binary = binary_path.resolve()
-        if self.input_root is not None and not binary.is_relative_to(self.input_root):
-            raise WorkspaceError(f"输入路径超出允许的输入根目录：{self.input_root}")
-        if not binary.is_file():
-            raise WorkspaceError(f"输入二进制不存在：{binary}")
+        binary = self.resolve_input(binary_path)
         project_name = _persistent_project_name(binary)
         self.runtime.ensure_started()
         effective_location = (
@@ -221,6 +345,50 @@ class ProgramWorkspace:
             binary,
             project_location=effective_location,
             project_name=project_name,
+            analyze=analyze,
+        )
+        api = context.__enter__()
+        try:
+            if analyze:
+                self.runtime.save(api)
+        except BaseException:
+            context.__exit__(*sys.exc_info())
+            raise
+        program_id = uuid4().hex
+        with self._lock:
+            self._programs[program_id] = _ProgramRecord(binary, context, api)
+        return program_id
+
+    def open_raw(
+        self,
+        binary_path: Path,
+        *,
+        language_id: str,
+        base_address: str,
+        compiler_id: str = "default",
+        project_location: Path | None = None,
+        analyze: bool = True,
+    ) -> str:
+        """以显式语言/基址打开 ``program_open`` 自动识别失败的裸二进制。
+
+        项目命名与存放位置与 ``open`` 完全一致（同一路径的二进制始终映射到同一个
+        持久化项目），因此之后无论调用 ``open`` 还是 ``open_raw``，都会找到同一个
+        已导入的程序，不会重复导入。
+        """
+
+        binary = self.resolve_input(binary_path)
+        project_name = _persistent_project_name(binary)
+        self.runtime.ensure_started()
+        effective_location = (
+            project_location.resolve() if project_location is not None else self.project_location
+        )
+        context = self.runtime.program_context_raw(
+            binary,
+            project_location=effective_location,
+            project_name=project_name,
+            language_id=language_id,
+            compiler_id=compiler_id,
+            base_address=base_address,
             analyze=analyze,
         )
         api = context.__enter__()

@@ -23,6 +23,22 @@ def register_program_tools(registry: ToolRegistry, workspace: ProgramWorkspace) 
         workspace.close(program_id)
         return {"closed": program_id}
 
+    def program_open_raw(
+        binary_path: str,
+        language_id: str,
+        base_address: str,
+        compiler_id: str = "default",
+        analyze: bool = True,
+    ) -> dict[str, str]:
+        program_id = workspace.open_raw(
+            Path(binary_path),
+            language_id=language_id,
+            base_address=base_address,
+            compiler_id=compiler_id,
+            analyze=analyze,
+        )
+        return {"program_id": program_id, "path": str(Path(binary_path).resolve())}
+
     definitions = (
         ToolDefinition(
             "program_open",
@@ -69,6 +85,16 @@ def register_program_tools(registry: ToolRegistry, workspace: ProgramWorkspace) 
                 idempotentHint=False,
                 openWorldHint=False,
             ),
+        ),
+        ToolDefinition(
+            "program_open_raw",
+            """以显式语言、编译器和基址打开 program_open 无法自动识别的裸二进制（例如固件原始镶像、无格式头的闪存转储）。
+
+输入输出与副作用：输入本地二进制路径、Ghidra 语言 ID（如 ARM:LE:32:Cortex）、基址（十六进制字符串，如 0x88000000）及可选编译器 ID（默认 default）和是否分析；返回程序会话标识与规范路径；会创建或打开 Ghidra 项目数据，与 program_open 共用同一套持久化项目命名规则，因此同一文件只会被导入一次。
+
+何时使用：program_open 因“No load spec found”等自动识别失败而报错时调用；已经从文档、ROM 头或字符串中获知目标架构与加载基址时使用；architecture 或基址未知时，先用 file_strings/file_hexdump 调查线索，不要凭空猜测。
+""",
+            program_open_raw,
         ),
     )
     for definition in definitions:

@@ -13,6 +13,7 @@ def test_default_catalog_has_one_registration_path_and_no_placeholders() -> None
         "program_list",
         "program_info",
         "program_close",
+        "program_open_raw",
         "memory_blocks_list",
         "memory_read",
         "functions_list",
@@ -44,6 +45,8 @@ def test_default_catalog_has_one_registration_path_and_no_placeholders() -> None
         "data_type_apply",
         "function_tag_update",
         "bookmark_set",
+        "file_strings",
+        "file_hexdump",
     ]
     assert all(callable(tool.handler) for tool in definitions)
     assert all("输入输出与副作用：" in tool.description for tool in definitions)
